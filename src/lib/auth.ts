@@ -13,7 +13,7 @@ export interface AuthUser {
 
 export async function signIn(email: string, password: string) {
   try {
-    if (typeof window === 'undefined') {
+    if (typeof window === 'undefined' || !auth) {
       return { user: null, error: { message: 'Authentification disponible uniquement côté client' } }
     }
 
@@ -52,7 +52,7 @@ export async function signIn(email: string, password: string) {
 
 export async function signOut() {
   try {
-    if (typeof window === 'undefined') {
+    if (typeof window === 'undefined' || !auth) {
       return { error: null }
     }
 
@@ -66,7 +66,7 @@ export async function signOut() {
 
 export async function getCurrentUser() {
   try {
-    if (typeof window === 'undefined') {
+    if (typeof window === 'undefined' || !auth) {
       return { user: null, error: null }
     }
 
@@ -90,7 +90,7 @@ export async function getCurrentUser() {
 
 export async function getSession() {
   try {
-    if (typeof window === 'undefined') {
+    if (typeof window === 'undefined' || !auth) {
       return { session: null, error: null }
     }
 
@@ -114,7 +114,7 @@ export async function getSession() {
 }
 
 export function onAuthStateChange(callback: (user: any) => void) {
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined' || !auth) {
     return () => {}
   }
 
