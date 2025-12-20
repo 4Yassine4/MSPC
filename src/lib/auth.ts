@@ -13,8 +13,12 @@ export interface AuthUser {
 
 export async function signIn(email: string, password: string) {
   try {
-    if (typeof window === 'undefined' || !auth) {
+    if (typeof window === 'undefined') {
       return { user: null, error: { message: 'Authentification disponible uniquement côté client' } }
+    }
+
+    if (!auth) {
+      return { user: null, error: { message: 'Firebase n\'est pas configuré. Vérifiez les variables d\'environnement.' } }
     }
 
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
@@ -90,7 +94,12 @@ export async function getCurrentUser() {
 
 export async function getSession() {
   try {
-    if (typeof window === 'undefined' || !auth) {
+    if (typeof window === 'undefined') {
+      return { session: null, error: null }
+    }
+
+    if (!auth) {
+      // Firebase pas encore initialisé, pas d'erreur, juste pas de session
       return { session: null, error: null }
     }
 

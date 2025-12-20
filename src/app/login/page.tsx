@@ -12,13 +12,24 @@ export default function LoginPage() {
   const router = useRouter()
 
   useEffect(() => {
-    checkSession()
+    // Attendre que le client soit complètement chargé
+    if (typeof window !== 'undefined') {
+      checkSession()
+    }
   }, [])
 
   const checkSession = async () => {
-    const { session } = await getSession()
-    if (session) {
-      router.push('/admin')
+    try {
+      const { session, error } = await getSession()
+      if (error) {
+        console.error('Session check error:', error)
+        return
+      }
+      if (session) {
+        router.push('/admin')
+      }
+    } catch (err) {
+      console.error('Error checking session:', err)
     }
   }
 
