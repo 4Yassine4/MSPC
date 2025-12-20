@@ -9,7 +9,7 @@ Plateforme éducative moderne pour la gestion de ressources pédagogiques avec 9
 - ✅ Système de demande d'accès aux corrections avec approbation
 - ✅ Téléchargement des fichiers
 - ✅ Interface moderne et responsive
-- ✅ Support Supabase (backend) ou localStorage (démo)
+- ✅ Stockage local avec localStorage
 
 ## 📋 Prérequis
 
@@ -29,19 +29,15 @@ cd mspc-site
 npm install
 ```
 
-3. **Configurer Supabase (optionnel mais recommandé)**
+3. **Configurer Firebase Authentication (optionnel mais recommandé)**
 
-   Pour utiliser Supabase comme backend :
-   - Créez un compte sur [supabase.com](https://supabase.com)
-   - Créez un nouveau projet
-   - Suivez les instructions dans `SUPABASE_SETUP.md`
-   - Créez le fichier `.env.local` :
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=https://votre-projet.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=votre_cle_anon
-   ```
+   Pour utiliser l'authentification Firebase :
+   - Créez un compte sur [Firebase Console](https://console.firebase.google.com)
+   - Créez un projet Firebase
+   - Suivez les instructions dans `FIREBASE_SETUP.md`
+   - Créez le fichier `.env.local` avec vos clés Firebase
 
-   **Note** : Si Supabase n'est pas configuré, l'application utilisera localStorage automatiquement.
+   **Note** : Si Firebase n'est pas configuré, l'authentification ne fonctionnera pas mais l'application utilisera localStorage pour les données.
 
 4. **Lancer le serveur de développement**
 ```bash
@@ -64,7 +60,8 @@ L'application sera accessible sur [http://localhost:3000](http://localhost:3000)
 
 ## 👨‍🏫 Accès Administration
 
-- URL: `/admin` (accès direct, sans authentification)
+- URL: `/admin` (nécessite une authentification Firebase)
+- URL de connexion: `/login`
 - Permet de gérer toutes les ressources et demandes d'accès
 
 ## 📖 Utilisation
@@ -76,25 +73,22 @@ L'application sera accessible sur [http://localhost:3000](http://localhost:3000)
 4. Demandez l'accès aux corrections si nécessaire
 
 ### Pour les professeurs :
-1. Cliquez sur "👨‍🏫 Administration" en haut à droite de la page d'accueil
-2. Accédez directement à l'interface admin (`/admin`)
+1. Allez sur `/login` pour vous connecter avec vos identifiants Firebase
+2. Accédez à l'interface admin (`/admin`)
 3. Ajoutez des ressources en sélectionnant le chapitre et le type
-4. Uploadez les fichiers (si Supabase configuré)
+4. Uploadez les fichiers (stockés localement dans le navigateur)
 5. Gérez les demandes d'accès aux corrections
 
 ## 🔧 Configuration
 
-### Avec Supabase (Production)
-- Données persistantes dans une base de données
-- Stockage de fichiers dans Supabase Storage
-- Synchronisation en temps réel
-- Voir `SUPABASE_SETUP.md` pour les détails
+### Authentification Firebase
+- Authentification sécurisée avec Firebase Auth
+- Voir `FIREBASE_SETUP.md` pour la configuration
 
-### Sans Supabase (Démo)
+### Stockage des données
 - Utilise localStorage du navigateur
 - Les données sont locales au navigateur
-- Les fichiers ne sont pas réellement stockés
-- Utile pour tester rapidement
+- Les fichiers sont stockés en base64 dans localStorage
 
 ## 📁 Structure du projet
 
@@ -103,12 +97,15 @@ mspc-site/
 ├── src/
 │   ├── app/
 │   │   ├── page.tsx          # Page d'accueil (étudiants)
-│   │   ├── admin/
-│   │   │   └── page.tsx      # Interface admin
+│   │   ├── login/
+│   │   │   └── page.tsx      # Page de connexion
+│   │   └── admin/
+│   │       └── page.tsx      # Interface admin
 │   └── lib/
-│       ├── supabase.ts       # Configuration Supabase
-│       └── storage.ts        # Couche d'abstraction (Supabase/localStorage)
-├── SUPABASE_SETUP.md         # Guide de configuration Supabase
+│       ├── firebase.ts       # Configuration Firebase
+│       ├── auth.ts           # Fonctions d'authentification
+│       └── storage.ts        # Gestion du stockage localStorage
+├── FIREBASE_SETUP.md         # Guide de configuration Firebase
 └── package.json
 ```
 
@@ -117,21 +114,21 @@ mspc-site/
 - **Next.js 16** - Framework React
 - **TypeScript** - Typage statique
 - **Tailwind CSS** - Styles
-- **Supabase** - Backend et stockage (optionnel)
+- **Firebase** - Authentification
 
 ## 📝 Notes importantes
 
 - Les ressources sont organisées par chapitre et par type
 - Les corrections nécessitent une demande d'accès approuvée
-- Le téléchargement fonctionne avec les URLs Supabase si configuré
-- En mode localStorage, les données persistent même après déconnexion (normal)
+- Les fichiers sont stockés localement dans le navigateur (base64)
+- Les données persistent dans localStorage même après déconnexion
 
 ## 🐛 Dépannage
 
 Si les ressources disparaissent :
-- Vérifiez que Supabase est correctement configuré
 - Vérifiez la console pour les erreurs
-- En mode localStorage, vérifiez que le navigateur n'a pas nettoyé les données
+- Vérifiez que le navigateur n'a pas nettoyé les données localStorage
+- Les données sont stockées localement, elles peuvent être perdues si vous nettoyez le cache du navigateur
 
 ## 📄 Licence
 

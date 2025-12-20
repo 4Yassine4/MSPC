@@ -37,6 +37,8 @@ export default function AdminPage() {
   const [viewResource, setViewResource] = useState<Resource | null>(null)
   const [user, setUser] = useState<any>(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const router = useRouter()
 
   // Vérifier l'authentification au montage
@@ -90,21 +92,16 @@ export default function AdminPage() {
       const { data, error } = await getResources()
       if (error) {
         console.error('Error loading resources:', error)
-        // Si c'est une erreur Supabase (table n'existe pas), on continue avec localStorage vide
-        if (error.message && error.message.includes('relation') && error.message.includes('does not exist')) {
-          console.warn('Les tables Supabase n\'existent pas encore. Utilisation de localStorage.')
-          setResources([])
-        } else {
-          if (showLoading) {
-            alert(`Erreur lors du chargement: ${error.message || JSON.stringify(error)}`)
-          }
+        if (showLoading) {
+          alert(`Erreur lors du chargement: ${error.message || JSON.stringify(error)}`)
         }
+        setResources([])
       } else {
         setResources(data || [])
       }
     } catch (error: any) {
       console.error('Unexpected error:', error)
-      setResources([]) // Continue avec une liste vide
+      setResources([])
     } finally {
       if (showLoading) {
         setLoading(false)
@@ -192,7 +189,16 @@ export default function AdminPage() {
       return
     }
 
+    if (!newResource.file) {
+      alert('Veuillez sélectionner un fichier à uploader')
+      return
+    }
+
+    setUploading(true)
+    setUploadProgress(0)
+
     try {
+      setUploadProgress(30)
       const { data, error } = await createResource(
         {
           title: newResource.title,
@@ -204,10 +210,14 @@ export default function AdminPage() {
         newResource.file || undefined
       )
 
+      setUploadProgress(100)
+
       if (error) {
         alert('Erreur lors de l\'ajout: ' + (error.message || 'Erreur inconnue'))
+        setUploading(false)
+        setUploadProgress(0)
       } else {
-        await loadResources() // Rafraîchir la liste
+        await loadResources()
         setNewResource({ 
           title: '', 
           description: '', 
@@ -216,11 +226,15 @@ export default function AdminPage() {
           file: null
         })
         setShowResourceForm(false)
-        alert('Ressource ajoutée avec succès!')
+        setUploading(false)
+        setUploadProgress(0)
+        alert('✅ Ressource ajoutée avec succès! Le fichier a été uploadé dans le cloud.')
       }
     } catch (error) {
       console.error('Error adding resource:', error)
       alert('Erreur lors de l\'ajout de la ressource')
+      setUploading(false)
+      setUploadProgress(0)
     }
   }
 
@@ -483,19 +497,44 @@ export default function AdminPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-800 mb-2">Fichier principal</label>
+                    <label className="block text-sm font-semibold text-gray-800 mb-2">
+                      Fichier principal <span className="text-blue-600">(sera stocké dans le cloud)</span>
+                    </label>
                     <input
                       type="file"
-                      accept=".pdf,.doc,.docx"
-                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:shadow-md file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                      accept=".pdf,.doc,.docx,.txt"
+                      required
+                      disabled={uploading}
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:shadow-md file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       onChange={(e) => setNewResource({...newResource, file: e.target.files?.[0] || null})}
                     />
+                    {newResource.file && (
+                      <p className="mt-2 text-sm text-green-600">
+                        📄 Fichier sélectionné : {newResource.file.name} ({(newResource.file.size / 1024 / 1024).toFixed(2)} MB)
+                      </p>
+                    )}
                   </div>
+                  {uploading && (
+                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-blue-800">Upload en cours...</span>
+                        <span className="text-sm font-semibold text-blue-800">{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-blue-200 rounded-full h-2.5">
+                        <div 
+                          className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-blue-600 mt-2">Le fichier est en train d'être uploadé dans Firebase Storage...</p>
+                    </div>
+                  )}
                   <button
                     type="submit"
-                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 px-6 rounded-lg transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    disabled={uploading}
+                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 px-6 rounded-lg transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                   >
-                    ✨ Ajouter la ressource
+                    {uploading ? '⏳ Upload en cours...' : '✨ Ajouter la ressource'}
                   </button>
                 </form>
               </div>
@@ -583,10 +622,16 @@ export default function AdminPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => {
-                    const link = document.createElement('a')
-                    link.href = viewResource.file_url!
-                    link.download = viewResource.file_name
-                    link.click()
+                    if (viewResource.file_url) {
+                      const link = document.createElement('a')
+                      link.href = viewResource.file_url
+                      link.download = viewResource.file_name
+                      link.target = '_blank'
+                      link.rel = 'noopener noreferrer'
+                      document.body.appendChild(link)
+                      link.click()
+                      document.body.removeChild(link)
+                    }
                   }}
                   className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2 px-4 rounded-lg transition-all shadow-md text-sm"
                 >
@@ -668,10 +713,16 @@ export default function AdminPage() {
                 {showQRCode.file_url && (
                   <button
                     onClick={() => {
-                      const link = document.createElement('a')
-                      link.href = showQRCode.file_url!
-                      link.download = showQRCode.file_name
-                      link.click()
+                      if (showQRCode.file_url) {
+                        const link = document.createElement('a')
+                        link.href = showQRCode.file_url
+                        link.download = showQRCode.file_name
+                        link.target = '_blank'
+                        link.rel = 'noopener noreferrer'
+                        document.body.appendChild(link)
+                        link.click()
+                        document.body.removeChild(link)
+                      }
                     }}
                     className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2 px-4 rounded-lg transition-all shadow-md"
                   >

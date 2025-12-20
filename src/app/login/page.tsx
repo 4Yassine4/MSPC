@@ -31,6 +31,7 @@ export default function LoginPage() {
       const { user, error: signInError } = await signIn(email, password)
       
       if (signInError) {
+        console.error('Sign in error:', signInError)
         setError(signInError.message || 'Email ou mot de passe incorrect')
         setLoading(false)
         return
@@ -41,7 +42,8 @@ export default function LoginPage() {
         router.refresh()
       }
     } catch (err: any) {
-      setError('Une erreur est survenue. Veuillez réessayer.')
+      console.error('Unexpected error:', err)
+      setError(err.message || 'Une erreur est survenue. Veuillez réessayer.')
     } finally {
       setLoading(false)
     }

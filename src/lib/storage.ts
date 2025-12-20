@@ -1,22 +1,19 @@
-// Couche d'abstraction pour le stockage (Supabase ou localStorage)
+import { db, storage } from './firebase'
 import { 
-  getResources as getResourcesSupabase,
-  createResource as createResourceSupabase,
-  updateResource as updateResourceSupabase,
-  deleteResource as deleteResourceSupabase,
-  uploadFile as uploadFileSupabase,
-  getCorrectionAccessRequests as getAccessRequestsSupabase,
-  createCorrectionAccessRequest as createAccessRequestSupabase,
-  updateCorrectionAccessRequest as updateAccessRequestSupabase,
-  getCorrectionAccesses as getAccessesSupabase,
-  hasCorrectionAccess as hasAccessSupabase,
-  type Resource as ResourceSupabase,
-  type CorrectionAccessRequest as CorrectionAccessRequestSupabase,
-  type CorrectionAccess as CorrectionAccessSupabase
-} from './supabase'
+  collection, 
+  doc, 
+  getDocs, 
+  addDoc, 
+  deleteDoc, 
+  updateDoc, 
+  query, 
+  orderBy, 
+  where,
+  getDoc,
+  Timestamp
+} from 'firebase/firestore'
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 
-
-// Types compatibles avec les deux systèmes
 export type Resource = {
   id: number
   title: string
@@ -34,358 +31,364 @@ export type Resource = {
 export type CorrectionAccessRequest = {
   id: string
   exerciseId: number
-  exercise_id?: number
   studentEmail: string
-  student_email?: string
   status: 'pending' | 'approved' | 'rejected'
   createdAt: string
-  created_at?: string
 }
 
 export type CorrectionAccess = {
   id?: number
   exerciseId: number
-  exercise_id?: number
   studentEmail: string
-  student_email?: string
   created_at?: string
 }
 
-// Convertir entre les formats
-function convertResourceFromSupabase(resource: any): Resource {
-  return {
-    id: resource.id,
-    title: resource.title,
-    description: resource.description,
-    file_name: resource.file_name,
-    file_url: resource.file_url,
-    correction_name: resource.correction_name,
-    correction_url: resource.correction_url,
-    chapitre: resource.chapitre,
-    type: resource.type,
-    created_at: resource.created_at,
-    updated_at: resource.updated_at
-  }
+const checkFirestore = () => {
+  return typeof window !== 'undefined' && db !== undefined && storage !== undefined
 }
 
-function convertResourceToSupabase(resource: Omit<Resource, 'id' | 'created_at'>): Omit<ResourceSupabase, 'id' | 'created_at'> {
-  return {
-    title: resource.title,
-    description: resource.description,
-    file_name: resource.file_name,
-    file_url: resource.file_url,
-    correction_name: resource.correction_name,
-    correction_url: resource.correction_url,
-    chapitre: resource.chapitre,
-    type: resource.type
-  }
-}
-
-// Fonction interne pour vérifier Supabase
-const checkSupabase = () => {
-  if (typeof window === 'undefined') return false
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  return url && url !== 'https://placeholder.supabase.co' && key && key !== 'placeholder_key'
-}
-
-// Fonctions pour les ressources
 export async function getResources(): Promise<{ data: Resource[] | null; error: any }> {
-  if (checkSupabase()) {
+  if (checkFirestore() && db) {
     try {
-      const result = await getResourcesSupabase()
-      if (result.error) {
-        // Si l'erreur indique que la table n'existe pas, fallback vers localStorage
-        const errorMsg = result.error.message || JSON.stringify(result.error)
-        if (errorMsg.includes('relation') && errorMsg.includes('does not exist')) {
-          console.warn('Table Supabase n\'existe pas encore, utilisation de localStorage')
-          // Fallback sur localStorage
-        } else {
-          // Autre erreur, on la retourne mais avec fallback
-          console.error('Erreur Supabase:', result.error)
-        }
-        // Continue vers localStorage
-      } else {
-        const converted = (result.data || []).map(convertResourceFromSupabase)
-        return { data: converted, error: null }
-      }
+      const resourcesRef = collection(db, 'resources')
+      const q = query(resourcesRef, orderBy('created_at', 'desc'))
+      const querySnapshot = await getDocs(q)
+      
+      const resources: Resource[] = []
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        resources.push({
+          id: data.id || Date.now(),
+          title: data.title || '',
+          description: data.description || '',
+          file_name: data.file_name || '',
+          file_url: data.file_url || undefined,
+          correction_name: data.correction_name || undefined,
+          correction_url: data.correction_url || undefined,
+          chapitre: data.chapitre || '',
+          type: data.type || 'Ressource',
+          created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at || new Date().toISOString(),
+          updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at || undefined
+        })
+      })
+      
+      return { data: resources, error: null }
     } catch (error: any) {
-      console.error('Error with Supabase, falling back to localStorage:', error)
-      // Fallback sur localStorage
+      console.error('Error fetching resources from Firestore:', error)
+      return { data: null, error }
     }
   }
-
-  // localStorage fallback
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('resources')
-    if (saved) {
-      try {
-        return { data: JSON.parse(saved), error: null }
-      } catch (e) {
-        return { data: null, error: e }
-      }
-    }
-  }
+  
   return { data: [], error: null }
 }
 
-export async function createResource(resource: Omit<Resource, 'id' | 'created_at'>, file?: File, correctionFile?: File): Promise<{ data: Resource | null; error: any }> {
-  if (checkSupabase()) {
+export async function createResource(
+  resource: Omit<Resource, 'id' | 'created_at'>, 
+  file?: File, 
+  correctionFile?: File
+): Promise<{ data: Resource | null; error: any }> {
+  if (checkFirestore()) {
     try {
       let fileUrl: string | undefined
       let correctionUrl: string | undefined
 
-      // Upload des fichiers si fournis
-      if (file) {
-        const uploadResult = await uploadFileSupabase(file, 'resources')
-        if (uploadResult.error) {
-          return { data: null, error: uploadResult.error }
-        }
-        fileUrl = uploadResult.data?.url
+      if (file && storage) {
+        const fileRef = ref(storage, `resources/${Date.now()}_${file.name}`)
+        await uploadBytes(fileRef, file)
+        fileUrl = await getDownloadURL(fileRef)
       }
 
-      if (correctionFile) {
-        const uploadResult = await uploadFileSupabase(correctionFile, 'corrections')
-        if (uploadResult.error) {
-          return { data: null, error: uploadResult.error }
-        }
-        correctionUrl = uploadResult.data?.url
+      if (correctionFile && storage) {
+        const correctionRef = ref(storage, `corrections/${Date.now()}_${correctionFile.name}`)
+        await uploadBytes(correctionRef, correctionFile)
+        correctionUrl = await getDownloadURL(correctionRef)
       }
 
-      const supabaseResource = convertResourceToSupabase({
-        ...resource,
-        file_url: fileUrl,
-        correction_url: correctionUrl
-      })
-
-      const result = await createResourceSupabase(supabaseResource)
-      if (result.error) {
-        return { data: null, error: result.error }
+      const newResource: any = {
+        title: resource.title,
+        description: resource.description,
+        file_name: resource.file_name,
+        chapitre: resource.chapitre,
+        type: resource.type,
+        created_at: Timestamp.now(),
+        updated_at: null
       }
-      return { data: convertResourceFromSupabase(result.data), error: null }
-    } catch (error) {
-      console.error('Error with Supabase, falling back to localStorage:', error)
+
+      if (fileUrl || resource.file_url) {
+        newResource.file_url = fileUrl || resource.file_url
+      }
+
+      if (correctionFile?.name || resource.correction_name) {
+        newResource.correction_name = correctionFile?.name || resource.correction_name
+      }
+
+      if (correctionUrl || resource.correction_url) {
+        newResource.correction_url = correctionUrl || resource.correction_url
+      }
+
+      const numericId = Date.now()
+      const resourceWithId: any = {
+        id: numericId,
+        title: newResource.title,
+        description: newResource.description,
+        file_name: newResource.file_name,
+        chapitre: newResource.chapitre,
+        type: newResource.type,
+        created_at: newResource.created_at
+      }
+
+      if (newResource.file_url) {
+        resourceWithId.file_url = newResource.file_url
+      }
+
+      if (newResource.correction_name) {
+        resourceWithId.correction_name = newResource.correction_name
+      }
+
+      if (newResource.correction_url) {
+        resourceWithId.correction_url = newResource.correction_url
+      }
+      
+      const docRef = await addDoc(collection(db!, 'resources'), resourceWithId)
+      
+      const createdResource: Resource = {
+        id: numericId,
+        title: newResource.title,
+        description: newResource.description,
+        file_name: newResource.file_name,
+        file_url: newResource.file_url || undefined,
+        correction_name: newResource.correction_name || undefined,
+        correction_url: newResource.correction_url || undefined,
+        chapitre: newResource.chapitre,
+        type: newResource.type,
+        created_at: newResource.created_at.toDate().toISOString(),
+        updated_at: undefined
+      }
+
+      return { data: createdResource, error: null }
+    } catch (error: any) {
+      console.error('Error creating resource in Firestore:', error)
+      return { data: null, error }
     }
   }
-
-  // localStorage fallback
-  if (typeof window !== 'undefined') {
-    const newResource: Resource = {
-      ...resource,
-      id: Date.now(),
-      created_at: new Date().toISOString()
-    }
-    const saved = localStorage.getItem('resources')
-    const resources = saved ? JSON.parse(saved) : []
-    resources.push(newResource)
-    localStorage.setItem('resources', JSON.stringify(resources))
-    return { data: newResource, error: null }
-  }
-  return { data: null, error: 'No storage available' }
+  
+  return { data: null, error: 'Firestore not available' }
 }
 
 export async function deleteResource(id: number): Promise<{ error: any }> {
-  if (checkSupabase()) {
+  if (checkFirestore() && db && storage) {
     try {
-      return await deleteResourceSupabase(id)
-    } catch (error) {
-      console.error('Error with Supabase, falling back to localStorage:', error)
+      const resourcesRef = collection(db, 'resources')
+      const q = query(resourcesRef, where('id', '==', id))
+      const querySnapshot = await getDocs(q)
+      
+      if (!querySnapshot.empty) {
+        const docToDelete = querySnapshot.docs[0]
+        const data = docToDelete.data()
+        
+        if (data.file_url) {
+          try {
+            const url = new URL(data.file_url)
+            const path = decodeURIComponent(url.pathname.split('/o/')[1]?.split('?')[0] || '')
+            if (path) {
+              const fileRef = ref(storage, path)
+              await deleteObject(fileRef)
+            }
+          } catch (error) {
+            console.warn('Error deleting file from storage:', error)
+          }
+        }
+        
+        if (data.correction_url) {
+          try {
+            const url = new URL(data.correction_url)
+            const path = decodeURIComponent(url.pathname.split('/o/')[1]?.split('?')[0] || '')
+            if (path) {
+              const correctionRef = ref(storage, path)
+              await deleteObject(correctionRef)
+            }
+          } catch (error) {
+            console.warn('Error deleting correction file from storage:', error)
+          }
+        }
+        
+        await deleteDoc(doc(db, 'resources', docToDelete.id))
+      }
+      
+      return { error: null }
+    } catch (error: any) {
+      console.error('Error deleting resource from Firestore:', error)
+      return { error }
     }
   }
-
-  // localStorage fallback
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('resources')
-    if (saved) {
-      const resources = JSON.parse(saved)
-      const updated = resources.filter((r: Resource) => r.id !== id)
-      localStorage.setItem('resources', JSON.stringify(updated))
-    }
-  }
+  
   return { error: null }
 }
 
-// Fonctions pour les demandes d'accès
 export async function getCorrectionAccessRequests(): Promise<{ data: CorrectionAccessRequest[] | null; error: any }> {
-  if (checkSupabase()) {
+  if (checkFirestore() && db) {
     try {
-      const result = await getAccessRequestsSupabase()
-      if (result.error) {
-        return { data: null, error: result.error }
-      }
-      const converted = (result.data || []).map((req: any) => ({
-        id: req.id,
-        exerciseId: req.exercise_id,
-        studentEmail: req.student_email,
-        status: req.status,
-        createdAt: req.created_at
-      }))
-      return { data: converted, error: null }
-    } catch (error) {
-      console.error('Error with Supabase, falling back to localStorage:', error)
+      const requestsRef = collection(db, 'correction_access_requests')
+      const q = query(requestsRef, orderBy('createdAt', 'desc'))
+      const querySnapshot = await getDocs(q)
+      
+      const requests: CorrectionAccessRequest[] = []
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        requests.push({
+          id: doc.id,
+          exerciseId: data.exerciseId || data.exercise_id,
+          studentEmail: data.studentEmail || data.student_email,
+          status: data.status,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || new Date().toISOString()
+        })
+      })
+      
+      return { data: requests, error: null }
+    } catch (error: any) {
+      console.error('Error fetching access requests from Firestore:', error)
+      return { data: null, error }
     }
   }
-
-  // localStorage fallback
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('accessRequests')
-    if (saved) {
-      try {
-        return { data: JSON.parse(saved), error: null }
-      } catch (e) {
-        return { data: null, error: e }
-      }
-    }
-  }
+  
   return { data: [], error: null }
 }
 
-export async function createCorrectionAccessRequest(exerciseId: number, studentEmail: string): Promise<{ data: CorrectionAccessRequest | null; error: any }> {
-  if (checkSupabase()) {
+export async function createCorrectionAccessRequest(
+  exerciseId: number, 
+  studentEmail: string
+): Promise<{ data: CorrectionAccessRequest | null; error: any }> {
+  if (checkFirestore() && db) {
     try {
-      const result = await createAccessRequestSupabase({
-        exercise_id: exerciseId,
-        student_email: studentEmail
-      })
-      if (result.error) {
-        return { data: null, error: result.error }
+      const newRequest = {
+        exerciseId,
+        studentEmail,
+        status: 'pending',
+        createdAt: Timestamp.now()
       }
+
+      const docRef = await addDoc(collection(db, 'correction_access_requests'), newRequest)
+      
       return {
         data: {
-          id: result.data.id,
-          exerciseId: result.data.exercise_id,
-          studentEmail: result.data.student_email,
-          status: result.data.status,
-          createdAt: result.data.created_at
+          id: docRef.id,
+          exerciseId,
+          studentEmail,
+          status: 'pending',
+          createdAt: newRequest.createdAt.toDate().toISOString()
         },
         error: null
       }
-    } catch (error) {
-      console.error('Error with Supabase, falling back to localStorage:', error)
+    } catch (error: any) {
+      console.error('Error creating access request in Firestore:', error)
+      return { data: null, error }
     }
   }
-
-  // localStorage fallback
-  if (typeof window !== 'undefined') {
-    const newRequest: CorrectionAccessRequest = {
-      id: Date.now().toString(),
-      exerciseId,
-      studentEmail,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    }
-    const saved = localStorage.getItem('accessRequests')
-    const requests = saved ? JSON.parse(saved) : []
-    requests.push(newRequest)
-    localStorage.setItem('accessRequests', JSON.stringify(requests))
-    return { data: newRequest, error: null }
-  }
-  return { data: null, error: 'No storage available' }
+  
+  return { data: null, error: 'Firestore not available' }
 }
 
-export async function updateCorrectionAccessRequest(id: string, status: 'approved' | 'rejected'): Promise<{ data: CorrectionAccessRequest | null; error: any }> {
-  if (checkSupabase()) {
+export async function updateCorrectionAccessRequest(
+  id: string, 
+  status: 'approved' | 'rejected'
+): Promise<{ data: CorrectionAccessRequest | null; error: any }> {
+  if (checkFirestore() && db) {
     try {
-      const result = await updateAccessRequestSupabase(id, status)
-      if (result.error) {
-        return { data: null, error: result.error }
-      }
-      return {
-        data: {
-          id: result.data.id,
-          exerciseId: result.data.exercise_id,
-          studentEmail: result.data.student_email,
-          status: result.data.status,
-          createdAt: result.data.created_at
-        },
-        error: null
-      }
-    } catch (error) {
-      console.error('Error with Supabase, falling back to localStorage:', error)
-    }
-  }
+      const requestRef = doc(db, 'correction_access_requests', id)
+      await updateDoc(requestRef, { status })
 
-  // localStorage fallback
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('accessRequests')
-    if (saved) {
-      const requests: CorrectionAccessRequest[] = JSON.parse(saved)
-      const updated = requests.map(r => r.id === id ? { ...r, status } : r)
-      localStorage.setItem('accessRequests', JSON.stringify(updated))
-
-      // Si approuvé, ajouter l'accès
       if (status === 'approved') {
-        const request = requests.find(r => r.id === id)
-        if (request) {
-          const savedAccesses = localStorage.getItem('correctionAccesses')
-          const accesses = savedAccesses ? JSON.parse(savedAccesses) : []
-          const newAccess = {
-            exerciseId: request.exerciseId,
-            studentEmail: request.studentEmail
+        const requestSnap = await getDoc(requestRef)
+        if (requestSnap.exists()) {
+          const data = requestSnap.data()
+          const accessData = {
+            exerciseId: data.exerciseId || data.exercise_id,
+            studentEmail: data.studentEmail || data.student_email,
+            created_at: Timestamp.now()
           }
-          if (!accesses.some((a: CorrectionAccess) => a.exerciseId === request.exerciseId && a.studentEmail === request.studentEmail)) {
-            accesses.push(newAccess)
-            localStorage.setItem('correctionAccesses', JSON.stringify(accesses))
+
+          const accessQuery = query(
+            collection(db!, 'correction_accesses'),
+            where('exerciseId', '==', accessData.exerciseId),
+            where('studentEmail', '==', accessData.studentEmail)
+          )
+          const accessSnapshot = await getDocs(accessQuery)
+
+          if (accessSnapshot.empty) {
+            await addDoc(collection(db!, 'correction_accesses'), accessData)
           }
         }
       }
-      return { data: updated.find(r => r.id === id) || null, error: null }
+
+      const updatedSnap = await getDoc(requestRef)
+      if (updatedSnap.exists()) {
+        const data = updatedSnap.data()
+        return {
+          data: {
+            id: updatedSnap.id,
+            exerciseId: data.exerciseId || data.exercise_id,
+            studentEmail: data.studentEmail || data.student_email,
+            status: data.status,
+            createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || new Date().toISOString()
+          },
+          error: null
+        }
+      }
+
+      return { data: null, error: null }
+    } catch (error: any) {
+      console.error('Error updating access request in Firestore:', error)
+      return { data: null, error }
     }
   }
-  return { data: null, error: 'No storage available' }
+  
+  return { data: null, error: 'Firestore not available' }
 }
 
-// Fonctions pour les accès
 export async function getCorrectionAccesses(): Promise<{ data: CorrectionAccess[] | null; error: any }> {
-  if (checkSupabase()) {
+  if (checkFirestore() && db) {
     try {
-      const result = await getAccessesSupabase()
-      if (result.error) {
-        return { data: null, error: result.error }
-      }
-      const converted = (result.data || []).map((acc: any) => ({
-        id: acc.id,
-        exerciseId: acc.exercise_id,
-        studentEmail: acc.student_email,
-        created_at: acc.created_at
-      }))
-      return { data: converted, error: null }
-    } catch (error) {
-      console.error('Error with Supabase, falling back to localStorage:', error)
+      const accessesRef = collection(db, 'correction_accesses')
+      const querySnapshot = await getDocs(accessesRef)
+      
+      const accesses: CorrectionAccess[] = []
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        accesses.push({
+          id: parseInt(doc.id) || undefined,
+          exerciseId: data.exerciseId || data.exercise_id,
+          studentEmail: data.studentEmail || data.student_email,
+          created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at
+        })
+      })
+      
+      return { data: accesses, error: null }
+    } catch (error: any) {
+      console.error('Error fetching accesses from Firestore:', error)
+      return { data: null, error }
     }
   }
-
-  // localStorage fallback
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('correctionAccesses')
-    if (saved) {
-      try {
-        return { data: JSON.parse(saved), error: null }
-      } catch (e) {
-        return { data: null, error: e }
-      }
-    }
-  }
+  
   return { data: [], error: null }
 }
 
 export async function hasCorrectionAccess(exerciseId: number, studentEmail: string): Promise<boolean> {
-  if (checkSupabase()) {
+  if (checkFirestore() && db) {
     try {
-      return await hasAccessSupabase(exerciseId, studentEmail)
-    } catch (error) {
-      console.error('Error with Supabase, falling back to localStorage:', error)
+      const accessesRef = collection(db, 'correction_accesses')
+      const q = query(
+        accessesRef,
+        where('exerciseId', '==', exerciseId),
+        where('studentEmail', '==', studentEmail)
+      )
+      const querySnapshot = await getDocs(q)
+      
+      return !querySnapshot.empty
+    } catch (error: any) {
+      console.error('Error checking access in Firestore:', error)
+      return false
     }
   }
-
-  // localStorage fallback
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('correctionAccesses')
-    if (saved) {
-      const accesses: CorrectionAccess[] = JSON.parse(saved)
-      return accesses.some(a => a.exerciseId === exerciseId && a.studentEmail === studentEmail)
-    }
-  }
+  
   return false
 }
-

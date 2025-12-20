@@ -1,4 +1,10 @@
-import { supabase } from './supabase'
+import { auth } from './firebase'
+import { 
+  signInWithEmailAndPassword, 
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  User
+} from 'firebase/auth'
 
 export interface AuthUser {
   id: string
@@ -7,39 +13,76 @@ export interface AuthUser {
 
 export async function signIn(email: string, password: string) {
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) {
-      return { user: null, error }
+    if (typeof window === 'undefined') {
+      return { user: null, error: { message: 'Authentification disponible uniquement côté client' } }
     }
 
-    return { user: data.user, error: null }
+    const userCredential = await signInWithEmailAndPassword(auth, email, password)
+    const user = userCredential.user
+
+    return { 
+      user: {
+        id: user.uid,
+        email: user.email || ''
+      }, 
+      error: null 
+    }
   } catch (error: any) {
-    return { user: null, error }
+    console.error('Sign in error:', error)
+    let errorMessage = 'Email ou mot de passe incorrect'
+    
+    if (error.code === 'auth/user-not-found') {
+      errorMessage = 'Aucun compte trouvé avec cet email'
+    } else if (error.code === 'auth/wrong-password') {
+      errorMessage = 'Mot de passe incorrect'
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage = 'Email invalide'
+    } else if (error.code === 'auth/network-request-failed') {
+      errorMessage = 'Erreur de connexion réseau. Vérifiez votre connexion internet.'
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+
+    return { 
+      user: null, 
+      error: { message: errorMessage } 
+    }
   }
 }
 
 export async function signOut() {
   try {
-    const { error } = await supabase.auth.signOut()
-    return { error }
+    if (typeof window === 'undefined') {
+      return { error: null }
+    }
+
+    await firebaseSignOut(auth)
+    return { error: null }
   } catch (error: any) {
-    return { error }
+    console.error('Sign out error:', error)
+    return { error: { message: error.message || 'Erreur lors de la déconnexion' } }
   }
 }
 
 export async function getCurrentUser() {
   try {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    
-    if (error || !user) {
-      return { user: null, error }
+    if (typeof window === 'undefined') {
+      return { user: null, error: null }
     }
 
-    return { user, error: null }
+    const currentUser = auth.currentUser
+    
+    if (!currentUser) {
+      return { user: null, error: null }
+    }
+
+    return { 
+      user: {
+        id: currentUser.uid,
+        email: currentUser.email || ''
+      }, 
+      error: null 
+    }
   } catch (error: any) {
     return { user: null, error }
   }
@@ -47,10 +90,21 @@ export async function getCurrentUser() {
 
 export async function getSession() {
   try {
-    const { data: { session }, error } = await supabase.auth.getSession()
+    if (typeof window === 'undefined') {
+      return { session: null, error: null }
+    }
+
+    const currentUser = auth.currentUser
     
-    if (error || !session) {
-      return { session: null, error }
+    if (!currentUser) {
+      return { session: null, error: null }
+    }
+
+    const session = {
+      user: {
+        id: currentUser.uid,
+        email: currentUser.email || ''
+      }
     }
 
     return { session, error: null }
@@ -60,8 +114,19 @@ export async function getSession() {
 }
 
 export function onAuthStateChange(callback: (user: any) => void) {
-  return supabase.auth.onAuthStateChange((_event, session) => {
-    callback(session?.user ?? null)
+  if (typeof window === 'undefined') {
+    return () => {}
+  }
+
+  return onAuthStateChanged(auth, (firebaseUser: User | null) => {
+    if (firebaseUser) {
+      callback({
+        id: firebaseUser.uid,
+        email: firebaseUser.email || ''
+      })
+    } else {
+      callback(null)
+    }
   })
 }
 

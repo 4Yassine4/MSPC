@@ -186,8 +186,7 @@ export default function HomePage() {
         ? resource.correction_name 
         : resource.file_name
       
-      // Vérifier les permissions pour les corrections
-      if (isCorrection && resource.type === 'Correction') {
+      if (isCorrection) {
         const hasAccess = await hasAccessToCorrection(resource.id)
         if (!hasAccess) {
           alert('Vous n\'avez pas accès à cette correction. Veuillez demander l\'accès d\'abord.')
@@ -195,65 +194,21 @@ export default function HomePage() {
         }
       }
 
-      // Vérifier les permissions pour les corrections d'exercices
-      if (isCorrection && resource.type === 'Exercice' && resource.correction_name) {
-        const hasAccess = await hasAccessToCorrection(resource.id)
-        if (!hasAccess) {
-          alert('Vous n\'avez pas accès à cette correction. Veuillez demander l\'accès d\'abord.')
-          return
-        }
-      }
-
-      // Utiliser l'URL du fichier si disponible (Supabase), sinon créer un blob de démo
       const fileUrl = isCorrection && resource.correction_url 
         ? resource.correction_url 
         : resource.file_url
 
       if (fileUrl) {
-        // Télécharger le fichier depuis Supabase ou URL
-        try {
-          const response = await fetch(fileUrl)
-          if (!response.ok) {
-            throw new Error('Erreur lors du téléchargement')
-          }
-          const blob = await response.blob()
-          const url = URL.createObjectURL(blob)
-          const link = document.createElement('a')
-          link.href = url
-          link.download = fileName
-          link.style.display = 'none'
-          document.body.appendChild(link)
-          link.click()
-          document.body.removeChild(link)
-          URL.revokeObjectURL(url)
-        } catch (error) {
-          console.error('Error downloading file:', error)
-          // Fallback : ouvrir dans un nouvel onglet
-          window.open(fileUrl, '_blank')
-        }
-      } else {
-        // Fallback: créer un blob avec les métadonnées (pour démo)
-        const fileContent = `
-Nom du fichier: ${fileName}
-Titre: ${resource.title}
-Description: ${resource.description}
-Chapitre: ${resource.chapitre}
-Type: ${resource.type}
-Date de création: ${resource.created_at}
-
-Note: Si Supabase est configuré, le fichier réel serait téléchargé depuis le serveur.
-        `.trim()
-
-        const blob = new Blob([fileContent], { type: 'text/plain' })
-        const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
-        link.href = url
+        link.href = fileUrl
         link.download = fileName
-        link.style.display = 'none'
+        link.target = '_blank'
+        link.rel = 'noopener noreferrer'
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
-        URL.revokeObjectURL(url)
+      } else {
+        alert('Aucun fichier disponible pour cette ressource.')
       }
     } catch (error) {
       console.error('Error in handleDownload:', error)
@@ -264,6 +219,8 @@ Note: Si Supabase est configuré, le fichier réel serait téléchargé depuis l
   const handleView = (resource: Resource) => {
     if (resource.file_url) {
       setViewResource(resource)
+    } else {
+      alert('Aucun fichier disponible pour cette ressource.')
     }
   }
 
@@ -677,10 +634,16 @@ Note: Si Supabase est configuré, le fichier réel serait téléchargé depuis l
               <div className="flex gap-2 w-full sm:w-auto">
                 <button
                   onClick={() => {
-                    const link = document.createElement('a')
-                    link.href = viewResource.file_url!
-                    link.download = viewResource.file_name
-                    link.click()
+                    if (viewResource.file_url) {
+                      const link = document.createElement('a')
+                      link.href = viewResource.file_url
+                      link.download = viewResource.file_name
+                      link.target = '_blank'
+                      link.rel = 'noopener noreferrer'
+                      document.body.appendChild(link)
+                      link.click()
+                      document.body.removeChild(link)
+                    }
                   }}
                   className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2 px-3 sm:px-4 rounded-lg transition-all shadow-md text-xs sm:text-sm flex-1 sm:flex-none"
                 >
@@ -695,11 +658,16 @@ Note: Si Supabase est configuré, le fichier réel serait téléchargé depuis l
               </div>
             </div>
             <div className="flex-1 overflow-hidden">
-              <iframe
-                src={`${viewResource.file_url}#toolbar=1&navpanes=1&scrollbar=1`}
-                className="w-full h-full border-0"
-                title={viewResource.title}
-              />
+              {viewResource.file_url && (
+                <iframe
+                  src={`${viewResource.file_url}#toolbar=1&navpanes=1&scrollbar=1`}
+                  className="w-full h-full border-0"
+                  title={viewResource.title}
+                  onError={() => {
+                    console.error('Erreur lors du chargement du fichier dans l\'iframe')
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
