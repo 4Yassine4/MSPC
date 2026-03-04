@@ -23,7 +23,7 @@ export type Resource = {
   correction_name?: string
   correction_url?: string
   chapitre: string
-  type: 'TP' | 'Synthèse' | 'Exercice' | 'Ressource' | 'Correction'
+  type: 'TP' | 'Synthèse' | 'Exercice' | 'Ressource' | 'Correction' | 'Vidéothèque'
   created_at: string
   updated_at?: string
 }

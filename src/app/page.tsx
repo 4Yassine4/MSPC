@@ -13,7 +13,7 @@ import {
   type CorrectionAccess
 } from '@/lib/storage'
 
-// Les 11 chapitres dans l'ordre
+// Les chapitres dans l'ordre
 const CHAPTERS = [
   'Électricité et électrotechnique',
   'Les composants électriques',
@@ -25,7 +25,19 @@ const CHAPTERS = [
   'Les méthodes de gestion et qualité',
   'Sécurité professionnelle, hygiène, environnement',
   'MSPC référentiel',
-  'Annexe'
+  'Annexe',
+  'RUVOUX',
+  'MOM',
+  'ERM',
+  'ECOLBRAS',
+  'CONVOYEUR',
+  'MULTITECC',
+  'DEGROUPEUR',
+  'EXTRUDICC',
+  'POLYPROD',
+  'MECASTEME',
+  'PALETICC',
+  'PALETISSEUR'
 ] as const
 
 type ChapterName = typeof CHAPTERS[number]
@@ -123,6 +135,12 @@ export default function HomePage() {
   }
 
   const hasPendingRequest = (resourceId: number): boolean => {
+    // Si on vient juste d'envoyer la demande dans cette session
+    if (requestedExercises.has(resourceId)) {
+      return true
+    }
+
+    // Sinon, vérifier les demandes enregistrées dans Firestore
     return accessRequests.some(
       req => req.exerciseId === resourceId && 
              req.studentEmail === studentEmail && 
@@ -131,33 +149,36 @@ export default function HomePage() {
   }
 
   const requestCorrectionAccess = async (resourceId: number) => {
-    const savedEmail = localStorage.getItem('studentEmail')
-    if (!savedEmail || !savedEmail.trim()) {
-      const email = prompt('Veuillez entrer votre email pour demander l\'accès à la correction:')
-      if (!email || !email.trim()) {
+    // Demander le prénom de l'élève (une seule fois par navigateur)
+    const savedName = localStorage.getItem('studentName') || localStorage.getItem('studentEmail')
+    
+    if (!savedName || !savedName.trim()) {
+      const name = prompt('Veuillez entrer votre prénom pour demander l\'accès à la correction :')
+      if (!name || !name.trim()) {
         return
       }
-      localStorage.setItem('studentEmail', email.trim())
-      setStudentEmail(email.trim())
+      const cleanName = name.trim()
+      localStorage.setItem('studentName', cleanName)
+      setStudentEmail(cleanName)
     } else {
-      setStudentEmail(savedEmail)
+      setStudentEmail(savedName)
     }
+
+    const currentName = studentEmail || localStorage.getItem('studentName') || localStorage.getItem('studentEmail') || ''
     
-    const currentEmail = studentEmail || localStorage.getItem('studentEmail') || ''
-    
-    if (!currentEmail || !currentEmail.trim()) {
+    if (!currentName || !currentName.trim()) {
       return
     }
 
-    // Vérifier si une demande est déjà en attente
+    // Vérifier si une demande est déjà en attente pour cet élève et cette ressource
     if (hasPendingRequest(resourceId)) {
       alert('Vous avez déjà une demande en attente pour cette ressource.')
       return
     }
 
     try {
-      console.log('Creating access request for resource:', resourceId, 'email:', currentEmail)
-      const { data, error } = await createCorrectionAccessRequest(resourceId, currentEmail)
+      console.log('Creating access request for resource:', resourceId, 'student:', currentName)
+      const { data, error } = await createCorrectionAccessRequest(resourceId, currentName)
       
       if (error) {
         console.error('Error creating request:', error)
@@ -246,10 +267,11 @@ export default function HomePage() {
       Synthèse: resources.filter(r => r.chapitre === chapitre && r.type === 'Synthèse'),
       Exercice: resources.filter(r => r.chapitre === chapitre && r.type === 'Exercice'),
       Ressource: resources.filter(r => r.chapitre === chapitre && r.type === 'Ressource'),
-      Correction: resources.filter(r => r.chapitre === chapitre && r.type === 'Correction')
+      Correction: resources.filter(r => r.chapitre === chapitre && r.type === 'Correction'),
+      Vidéothèque: resources.filter(r => r.chapitre === chapitre && r.type === 'Vidéothèque')
     }
     return acc
-  }, {} as Record<ChapterName, Record<'TP' | 'Synthèse' | 'Exercice' | 'Ressource' | 'Correction', Resource[]>>)
+  }, {} as Record<ChapterName, Record<'TP' | 'Synthèse' | 'Exercice' | 'Ressource' | 'Correction' | 'Vidéothèque', Resource[]>>)
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/50 to-indigo-50/30">
       {/* Header */}
@@ -472,8 +494,11 @@ export default function HomePage() {
                                           📥 Voir correction
                                         </button>
                                       ) : hasPending ? (
-                                        <button disabled className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold cursor-not-allowed opacity-75 sm:ml-2 shadow-sm w-full sm:w-auto">
-                                          ⏳ En attente
+                                        <button 
+                                          disabled 
+                                          className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold cursor-not-allowed opacity-80 sm:ml-2 shadow-md w-full sm:w-auto"
+                                        >
+                                          ✅ Demande envoyée
                                         </button>
                                       ) : (
                                     <button 
@@ -534,6 +559,54 @@ export default function HomePage() {
                                       handleDownload(resource)
                                     }}
                                     className="bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-3 py-2 rounded-lg text-xs font-semibold transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 whitespace-nowrap cursor-pointer"
+                                  >
+                                    📥 Télécharger
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Vidéothèque */}
+                    {chapterResources.Vidéothèque.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="w-10 h-10 bg-pink-100 rounded-lg flex items-center justify-center">
+                            <span className="text-2xl">🎬</span>
+                          </div>
+                          <h4 className="text-xl sm:text-2xl font-bold text-gray-900">Vidéothèque</h4>
+                          <span className="px-3 py-1 bg-pink-100 text-pink-800 rounded-full text-sm font-semibold">{chapterResources.Vidéothèque.length}</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                          {chapterResources.Vidéothèque.map((resource) => (
+                            <div key={resource.id} className="bg-gradient-to-br from-pink-50 to-white rounded-xl p-5 border-2 border-pink-100 hover:border-pink-300 hover:shadow-xl transition-all group">
+                              <h5 className="font-bold text-lg text-gray-900 mb-2 group-hover:text-pink-600 transition-colors">{resource.title}</h5>
+                              <p className="text-sm text-gray-700 mb-4 leading-relaxed">{resource.description}</p>
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 pt-3 border-t border-gray-200">
+                                <span className="text-xs text-gray-600 truncate flex-1 font-medium w-full sm:w-auto">🎥 {resource.file_name}</span>
+                                <div className="flex gap-2 w-full sm:w-auto sm:ml-2">
+                                  {resource.file_url && (
+                                    <button 
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        handleView(resource)
+                                      }}
+                                      className="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white px-3 py-2 rounded-lg text-xs font-semibold transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 whitespace-nowrap cursor-pointer"
+                                    >
+                                      👁️ Voir
+                                    </button>
+                                  )}
+                                  <button 
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      handleDownload(resource)
+                                    }}
+                                    className="bg-gradient-to-r from-pink-600 to-pink-700 hover:from-pink-700 hover:to-pink-800 text-white px-3 py-2 rounded-lg text-xs font-semibold transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 whitespace-nowrap cursor-pointer"
                                   >
                                     📥 Télécharger
                                   </button>

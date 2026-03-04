@@ -19,17 +19,9 @@ export default function LoginPage() {
   }, [])
 
   const checkSession = async () => {
-    try {
-      const { session, error } = await getSession()
-      if (error) {
-        console.error('Session check error:', error)
-        return
-      }
-      if (session) {
-        router.push('/admin')
-      }
-    } catch (err) {
-      console.error('Error checking session:', err)
+    const { session } = await getSession()
+    if (session) {
+      router.push('/admin')
     }
   }
 

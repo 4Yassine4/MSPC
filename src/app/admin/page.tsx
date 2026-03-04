@@ -14,7 +14,7 @@ import {
 } from '@/lib/storage'
 import { getSession, signOut, getCurrentUser } from '@/lib/auth'
 
-// Les 11 chapitres dans l'ordre
+// Les chapitres dans l'ordre
 const CHAPTERS = [
   'Électricité et électrotechnique',
   'Les composants électriques',
@@ -26,7 +26,19 @@ const CHAPTERS = [
   'Les méthodes de gestion et qualité',
   'Sécurité professionnelle, hygiène, environnement',
   'MSPC référentiel',
-  'Annexe'
+  'Annexe',
+  'RUVOUX',
+  'MOM',
+  'ERM',
+  'ECOLBRAS',
+  'CONVOYEUR',
+  'MULTITECC',
+  'DEGROUPEUR',
+  'EXTRUDICC',
+  'POLYPROD',
+  'MECASTEME',
+  'PALETICC',
+  'PALETISSEUR'
 ] as const
 
 
@@ -494,6 +506,7 @@ export default function AdminPage() {
                       <option value="Exercice" className="text-gray-900">Exercice</option>
                       <option value="Ressource" className="text-gray-900">Ressource</option>
                       <option value="Correction" className="text-gray-900">Correction</option>
+                      <option value="Vidéothèque" className="text-gray-900">Vidéothèque</option>
                     </select>
                   </div>
                   <div>
