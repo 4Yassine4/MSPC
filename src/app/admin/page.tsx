@@ -27,7 +27,7 @@ const CHAPTERS = [
   'Sécurité professionnelle, hygiène, environnement',
   'MSPC référentiel',
   'Annexe',
-  'RUVOUX',
+  'RAVOUX',
   'MOM',
   'ERM',
   'ECOLBRAS',
